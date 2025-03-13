@@ -1,4 +1,4 @@
 style:
 	isort .
 	black .
-	flake8 
+	flake8 --exclude=experiments
