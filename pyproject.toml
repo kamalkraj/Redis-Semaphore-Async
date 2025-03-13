@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redis-semaphore-async"
+version = "0.0.1"
+authors = [
+  { name="Kamal Raj K", email="kamalraj97@gmail.com" },
+]
+description = "Redis Semaphore Async is a Python library that provides an asynchronous semaphore implementation using Redis as the backend."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "redis[hiredis]==5.2.1",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.5",
+  "pytest-asyncio==0.25.3",
+  "black==25.1.0",
+  "isort==6.0.1",
+  "pyright==1.1.396",
+  "flake8==7.1.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/kamalkraj/Redis-Semaphore-Async"
+Issues = "https://github.com/kamalkraj/Redis-Semaphore-Async/issues"
+
+
+[tool.black]
+line-length = 119
+target-version = ['py310']
+
+[tool.isort]
+atomic = true
+profile = "black"
+py_version = "310"
+skip_glob = ["env/*"]
