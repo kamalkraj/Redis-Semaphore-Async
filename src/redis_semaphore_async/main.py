@@ -123,18 +123,21 @@ class Semaphore(_ContextManagerMixin):
         """Release a semaphore, incrementing the internal counter by one."""
         # acquire lock to set the counter value
         lock = Lock(self.redis, self.lock_key)
-        pubsub = self.redis.pubsub()
         await lock.acquire()
         try:
-            # increment the counter value
-            await self.redis.incr(self._key)
+            current_value = await self.redis.get(self._key)
+            if (current_value is not None) and int(current_value) < self._value:
+                # if the semaphore is available, increment the counter
+                await self.redis.incr(self._key)
+                await self.redis.publish(self._pubsub_key, str(self.task_id))
+                logger.info(f"Releasing semaphore {self._key} with task id {self.task_id}")
+                return
             # send a message to the channel
-            logger.info(f"Releasing semaphore {self._key} with task id {self.task_id}")
-            await self.redis.publish(self._pubsub_key, str(self.task_id))
         except Exception as e:
             logger.error(f"Error releasing semaphore: {e}")
+            # raise the exception
+            raise e
         finally:
             # release the lock
-            await pubsub.aclose()
-            if await lock.owned() and await lock.locked():
+            if await lock.owned():
                 await lock.release()
