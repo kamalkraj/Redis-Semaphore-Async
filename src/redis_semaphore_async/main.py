@@ -12,6 +12,7 @@ class _ContextManagerMixin:
     async def __aenter__(self) -> None:
         """
         Context manager entry point. This is called when the
+        'with' statement is used. It acquires the semaphore.
         """
         await self.acquire()
         # We have no use for the "as ..."  clause in the with
@@ -19,8 +20,10 @@ class _ContextManagerMixin:
         return None
 
     async def __aexit__(self, exc_type, exc, tb):
-        """
+        """ ""
         Context manager exit point. This is called when the
+        with statement exits. It releases the semaphore that was acquired
+        when entering the context.
         with statement exits.
         """
         await self.release()
@@ -72,9 +75,9 @@ class Semaphore(_ContextManagerMixin):
             # if the semaphore is not available, wait for it to be released
             # first push the task id to the list of waiters
             await self.redis.lpush(self._waiters_key, str(self.task_id))
-            await lock.release()
             # then subscribe to the channel
             await pubsub.subscribe(self._pubsub_key)
+            await lock.release()
             # wait for the semaphore to be released
             async for message in pubsub.listen():
                 # check if the message received
@@ -111,10 +114,10 @@ class Semaphore(_ContextManagerMixin):
             # raise the exception
             raise e
         finally:
-            # release the lock
-            if await lock.owned() and await lock.locked():
-                await lock.release()
             await pubsub.aclose()
+            # release the lock
+            if await lock.owned():
+                await lock.release()
 
     async def release(self) -> None:
         """Release a semaphore, incrementing the internal counter by one."""
@@ -132,6 +135,6 @@ class Semaphore(_ContextManagerMixin):
             logger.error(f"Error releasing semaphore: {e}")
         finally:
             # release the lock
+            await pubsub.aclose()
             if await lock.owned() and await lock.locked():
                 await lock.release()
-            await pubsub.aclose()
