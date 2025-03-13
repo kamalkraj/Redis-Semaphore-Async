@@ -13,7 +13,7 @@ class _ContextManagerMixin:
         """
         Context manager entry point. This is called when the
         """
-        await self.acquire()  # type: ignore
+        await self.acquire()
         # We have no use for the "as ..."  clause in the with
         # statement for locks.
         return None
@@ -23,7 +23,7 @@ class _ContextManagerMixin:
         Context manager exit point. This is called when the
         with statement exits.
         """
-        await self.release()  # type: ignore
+        await self.release()
 
 
 class Semaphore(_ContextManagerMixin):
@@ -40,22 +40,21 @@ class Semaphore(_ContextManagerMixin):
         self.redis = redis
         self._value = value
         self.task_id = task_id
-        self._waiters = None
         self._delay = delay
         self._key = f"{namespace}:{task_name}"
         self.lock_key = f"{self._key}:lock"
         self._waiters_key = f"{self._key}:waiters"
         self._pubsub_key = f"{self._key}:channel"
 
-    async def acquire(self) -> None:
+    async def acquire(self) -> bool:
         """
         Acquire the semaphore.
         """
         # acquire lock to set the counter value
-        logger.info(f"Acquiring semaphore {self._key} with task id {self.task_id}")
         lock = Lock(self.redis, self.lock_key)
-        pubsub = self.redis.pubsub()
         await lock.acquire()
+        logger.info(f"Acquiring semaphore {self._key} with task id {self.task_id}")
+        pubsub = self.redis.pubsub()
         try:
             # check if the semaphore is available
             exists = await self.redis.exists(self._key)
@@ -69,9 +68,7 @@ class Semaphore(_ContextManagerMixin):
                 logger.info(f"Semaphore {self._key} acquired by task id {self.task_id}")
                 # if the semaphore is available, decrement the counter
                 await self.redis.decr(self._key)
-                await lock.release()
                 return True
-            logger.info(f"Semaphore {self._key} not available, waiting for it to be released")
             # if the semaphore is not available, wait for it to be released
             # first push the task id to the list of waiters
             await self.redis.lpush(self._waiters_key, str(self.task_id))
@@ -94,7 +91,7 @@ class Semaphore(_ContextManagerMixin):
                         # remove the task id from the list of waiters
                         await self.redis.rpop(self._waiters_key)
                         await self.redis.decr(self._key)
-                        await pubsub.unsubscribe(self._waiters_key)
+                        await pubsub.unsubscribe(self._pubsub_key)
                         await lock.release()
                         logger.info(f"Semaphore {self._key} acquired by task id {self.task_id}")
                         return True
@@ -105,17 +102,22 @@ class Semaphore(_ContextManagerMixin):
 
         except Exception as e:
             logger.error(f"Error acquiring semaphore: {e}")
-            # release the lock
-            await lock.release()
-            return False
+            # unsubscribe from the channel
+            await pubsub.unsubscribe(self._pubsub_key)
+            # remove the task id from the list of waiters
+            await self.redis.lrem(self._waiters_key, 0, str(self.task_id))
+            # increment the counter value
+            await self.redis.incr(self._key)
+            # raise the exception
+            raise e
         finally:
             # release the lock
-            if await lock.locked():
+            if await lock.owned() and await lock.locked():
                 await lock.release()
             await pubsub.aclose()
 
-    async def release(self):
-        """Release a semaphore, incrementing the internal counter by one." """
+    async def release(self) -> None:
+        """Release a semaphore, incrementing the internal counter by one."""
         # acquire lock to set the counter value
         lock = Lock(self.redis, self.lock_key)
         pubsub = self.redis.pubsub()
@@ -130,6 +132,6 @@ class Semaphore(_ContextManagerMixin):
             logger.error(f"Error releasing semaphore: {e}")
         finally:
             # release the lock
-            if await lock.locked():
+            if await lock.owned() and await lock.locked():
                 await lock.release()
             await pubsub.aclose()
