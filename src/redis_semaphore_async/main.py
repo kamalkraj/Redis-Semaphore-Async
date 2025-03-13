@@ -42,7 +42,7 @@ class Semaphore(_ContextManagerMixin):
     ):
         self.redis = redis
         self._value = value
-        self.task_id = task_id
+        self.task_id = str(task_id)
         self._delay = delay
         self._key = f"{namespace}:{task_name}"
         self.lock_key = f"{self._key}:lock"
@@ -74,7 +74,7 @@ class Semaphore(_ContextManagerMixin):
                 return True
             # if the semaphore is not available, wait for it to be released
             # first push the task id to the list of waiters
-            await self.redis.lpush(self._waiters_key, str(self.task_id))
+            await self.redis.lpush(self._waiters_key, self.task_id)
             # then subscribe to the channel
             await pubsub.subscribe(self._pubsub_key)
             await lock.release()
@@ -88,7 +88,7 @@ class Semaphore(_ContextManagerMixin):
                         # if the list is empty, break the loop
                         break
 
-                    if task_id == str(self.task_id):
+                    if task_id == self.task_id:
                         await lock.acquire()
                         # if the task id matches, release the semaphore
                         # remove the task id from the list of waiters
@@ -108,7 +108,7 @@ class Semaphore(_ContextManagerMixin):
             # unsubscribe from the channel
             await pubsub.unsubscribe(self._pubsub_key)
             # remove the task id from the list of waiters
-            await self.redis.lrem(self._waiters_key, 0, str(self.task_id))
+            await self.redis.lrem(self._waiters_key, 0, self.task_id)
             # increment the counter value
             await self.redis.incr(self._key)
             # raise the exception
@@ -129,7 +129,7 @@ class Semaphore(_ContextManagerMixin):
             if (current_value is not None) and int(current_value) < self._value:
                 # if the semaphore is available, increment the counter
                 await self.redis.incr(self._key)
-                await self.redis.publish(self._pubsub_key, str(self.task_id))
+                await self.redis.publish(self._pubsub_key, self.task_id)
                 logger.info(f"Releasing semaphore {self._key} with task id {self.task_id}")
                 return
             # send a message to the channel
