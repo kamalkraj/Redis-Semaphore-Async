@@ -1,4 +1,5 @@
 import logging
+import traceback
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -11,21 +12,27 @@ logger.addHandler(logging.NullHandler())
 class _ContextManagerMixin:
     async def __aenter__(self) -> None:
         """
-        Context manager entry point. This is called when the
-        'with' statement is used. It acquires the semaphore.
+        Context manager entry point for async with statements.
+        Acquires the semaphore and returns None.
+        Raises:
+            RuntimeError: If the semaphore cannot be acquired.
         """
-        await self.acquire()
-        # We have no use for the "as ..."  clause in the with
-        # statement for locks.
+        success = await self.acquire()
+        if not success:
+            raise RuntimeError("Failed to acquire semaphore")
         return None
 
     async def __aexit__(self, exc_type, exc, tb):
-        """ ""
-        Context manager exit point. This is called when the
-        with statement exits. It releases the semaphore that was acquired
-        when entering the context.
         """
-        await self.release()
+        Context manager exit point for async with statements.
+        Releases the semaphore regardless of whether an exception occurred.
+        """
+        try:
+            if exc_type is not None:
+                logger.error(f"Exception in semaphore context: {exc}")
+                logger.debug(f"Exception details: {exc_type.__name__}, Traceback: {traceback.format_exc()}")
+        finally:
+            await self.release()
 
 
 class Semaphore(_ContextManagerMixin):
@@ -154,7 +161,9 @@ class Semaphore(_ContextManagerMixin):
             if await lock.owned():
                 await lock.release()
 
-    async def release(self) -> None:
+    async def release(
+        self,
+    ) -> None:
         """Release a semaphore, incrementing the internal counter by one."""
         # acquire lock to set the counter value
         lock = Lock(self.redis, self.lock_key)
