@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "redis_semaphore_async"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Kamal Raj K", email="kamalraj97@gmail.com" },
 ]
