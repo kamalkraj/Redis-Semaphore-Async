@@ -16,16 +16,24 @@ Here is an example of how to use Redis-Semaphore-Async:
 
 ```python
 import asyncio
-from uuid import uuid4
 from redis.asyncio import Redis
 from redis_semaphore_async import Semaphore
 
 async def main():
     redis = Redis(host='localhost', port=6379, decode_responses=True)
-    task_id = uuid4()
-    async with Semaphore(redis=redis, task_name="test_semaphore", task_id=task_id, value=5) as sem:
+    async with Semaphore(redis=redis, task_name="test_semaphore", value=5):
         # Your code here
         pass
+    # or 
+    semaphore = Semaphore(redis=redis, task_name="test_semaphore", value=5)
+    with semaphore:
+        # Your code here
+        pass
+    # or
+    semaphore = Semaphore(redis=redis, task_name="test_semaphore", value=5)
+    await semaphore.acquire()
+    # Your code here
+    await semaphore.release()
 
 if __name__ == "__main__":
     asyncio.run(main())
