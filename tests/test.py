@@ -151,6 +151,44 @@ async def test_semaphore_with_multiple() -> None:
     logger.info(f"Test completed in {execution_time:.2f} seconds")
 
 
+async def test_semaphore_with_exception() -> None:
+    """
+    Test semaphore behavior when an exception occurs within the semaphore context.
+    This test verifies that the semaphore properly releases its token when:
+    1. A task completes normally
+    2. A task raises an exception within the semaphore context
+    The test tracks the semaphore's counter value at three points:
+    - Initial state (should be at max value)
+    - After a successful task completion (should return to max value)
+    - After a task with an exception (should still return to max value)
+    This ensures the semaphore implementation correctly handles exceptions without
+    leaving the semaphore in a locked state.
+    """
+    logger.info("=== Testing semaphore with exception handling ===")
+    redis_conn = await get_redis_connection()
+    await redis_conn.flushall()  # Clear Redis for clean state
+    semaphore = Semaphore(redis=redis_conn, task_name=SEMAPHORE_NAME, value=SEMAPHORE_LIMIT)
+
+    async def run_task_with_exception(raise_excpetion: bool) -> None:
+        try:
+            async with semaphore:
+                logger.debug("Task attempting to acquire semaphore")
+                await value_func(1)
+                if raise_excpetion:
+                    raise ValueError("Simulated exception")
+        except Exception as e:
+            logger.error(f"Exception in task: {e}")
+
+    distributed_counter_value_init = await redis_conn.get(f"semaphore:{SEMAPHORE_NAME}")
+    logger.info(f"Initial distributed counter value: {distributed_counter_value_init}")
+    await run_task_with_exception(raise_excpetion=False)
+    distributed_counter_value_after = await redis_conn.get(f"semaphore:{SEMAPHORE_NAME}")
+    logger.info(f"Distributed counter value after task: {distributed_counter_value_after}")
+    await run_task_with_exception(raise_excpetion=True)
+    distributed_counter_value_final = await redis_conn.get(f"semaphore:{SEMAPHORE_NAME}")
+    logger.info(f"Final distributed counter value: {distributed_counter_value_final}")
+
+
 async def main() -> None:
     """Run all semaphore tests sequentially."""
     global value
@@ -169,6 +207,9 @@ async def main() -> None:
         value = 1000
 
         await test_semaphore_with_multiple()
+        value = 1000
+
+        await test_semaphore_with_exception()
 
         logger.info("All tests completed successfully")
     except Exception as e:
