@@ -37,12 +37,10 @@ class Semaphore(_ContextManagerMixin):
         task_id: UUID,
         value: int = 1,
         namespace: str = "semaphore",
-        delay: float = 0.1,
     ):
         self.redis = redis
         self._value = value
         self.task_id = str(task_id)
-        self._delay = delay
         self._key = f"{namespace}:{task_name}"
         self.lock_key = f"{self._key}:lock"
         self._waiters_key = f"{self._key}:waiters"
