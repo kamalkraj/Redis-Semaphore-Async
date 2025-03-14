@@ -29,7 +29,45 @@ class _ContextManagerMixin:
 
 
 class Semaphore(_ContextManagerMixin):
+    """"
+    A distributed semaphore implementation using Redis for synchronization across distributed processes.
 
+    This class implements a counting semaphore that works across multiple processes or services
+    by utilizing Redis as a centralized coordination mechanism. The semaphore maintains a counter
+    that limits the number of concurrent accesses to a shared resource.
+
+    The implementation uses a combination of Redis data structures:
+    - A key to store the semaphore counter value
+    - A list to maintain waiting tasks
+    - A pub/sub channel for notifying waiting tasks
+    - A lock to ensure atomic operations
+
+    The semaphore supports asynchronous operations and can be used as a context manager.
+
+    Attributes:
+        redis (Redis): Redis client instance for communication with Redis server
+        _value (int): Maximum number of concurrent accesses allowed by the semaphore
+        task_id (str): Unique identifier for the task using this semaphore
+        _key (str): Redis key for storing the semaphore counter
+        lock_key (str): Redis key for the lock used to ensure atomic operations
+        _waiters_key (str): Redis key for the list of waiting tasks
+        _pubsub_key (str): Redis key for the pub/sub channel
+
+    Example:
+        ```
+        redis_client = Redis.from_url("redis://localhost")
+        sem = Semaphore(
+            redis=redis_client,
+            task_name="resource_access",
+            task_id=uuid.uuid4(),
+            value=3,  # Allow 3 concurrent accesses
+        )
+        
+        async with sem:
+            # Access the protected resource
+            await perform_limited_operation()
+        ```
+    """
     def __init__(
         self,
         redis: Redis,
