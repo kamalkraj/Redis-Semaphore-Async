@@ -24,7 +24,6 @@ class _ContextManagerMixin:
         Context manager exit point. This is called when the
         with statement exits. It releases the semaphore that was acquired
         when entering the context.
-        with statement exits.
         """
         await self.release()
 
@@ -85,8 +84,9 @@ class Semaphore(_ContextManagerMixin):
                     # lindex the list of waiters
                     task_id = await self.redis.lindex(self._waiters_key, -1)
                     if task_id is None:
-                        # if the list is empty, break the loop
-                        break
+                        # Task ID should not be None if we've received a message
+                        # Raise exception to prevent silent failures
+                        raise RuntimeError(f"Task ID is None for semaphore {self._key}, waiters list may be corrupted")
 
                     if task_id == self.task_id:
                         await lock.acquire()
