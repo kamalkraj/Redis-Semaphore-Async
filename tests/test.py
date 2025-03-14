@@ -188,6 +188,10 @@ async def test_semaphore_with_exception() -> None:
     distributed_counter_value_final = await redis_conn.get(f"semaphore:{SEMAPHORE_NAME}")
     logger.info(f"Final distributed counter value: {distributed_counter_value_final}")
 
+    assert (
+        distributed_counter_value_after == distributed_counter_value_final
+    ), "Semaphore did not release after exception"
+
 
 async def main() -> None:
     """Run all semaphore tests sequentially."""
